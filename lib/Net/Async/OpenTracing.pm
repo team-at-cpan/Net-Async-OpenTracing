@@ -1,4 +1,5 @@
 package Net::Async::OpenTracing;
+# ABSTRACT: wire protocol support for the opentracing.io API
 
 use strict;
 use warnings;
