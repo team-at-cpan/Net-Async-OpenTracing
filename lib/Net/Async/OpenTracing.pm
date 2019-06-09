@@ -3,6 +3,8 @@ package Net::Async::OpenTracing;
 use strict;
 use warnings;
 
+use utf8;
+
 our $VERSION = '0.001';
 
 use parent qw(IO::Async::Notifier);
