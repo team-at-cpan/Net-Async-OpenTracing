@@ -34,7 +34,7 @@ Start up a Jæger instance in Docker like so:
   -p 16686:16686 \
   -p 14268:14268 \
   -p 9411:9411 \
-  jaegertracing/all-in-one:1.12
+  jaegertracing/all-in-one:1.17
 
 Set up an L<Net::Async::OpenTracing> instance with those connection details:
 
