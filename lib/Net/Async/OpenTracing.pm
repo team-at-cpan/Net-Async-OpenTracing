@@ -4,17 +4,19 @@ package Net::Async::OpenTracing;
 use strict;
 use warnings;
 
-use utf8;
-
 our $VERSION = '0.001';
+# AUTHORITY
 
 use parent qw(IO::Async::Notifier);
+
+no indirect;
+use utf8;
 
 =encoding utf8
 
 =head1 NAME
 
-Net::Async::OpenTracing - basic proof-of-concept implementation for OpenTracing APM
+Net::Async::OpenTracing - OpenTracing APM via L<IO::Async>
 
 =head1 DESCRIPTION
 
@@ -23,7 +25,7 @@ the first port of call for official documentation.
 
 =head2 Setting up and testing
 
-Start up a Jæger instance in Docker like so:
+If you want to experiment with this, start by setting up a Jæger instance in Docker like so:
 
  docker run -d --name jaeger \
   -e COLLECTOR_ZIPKIN_HTTP_PORT=9411 \
@@ -36,8 +38,14 @@ Start up a Jæger instance in Docker like so:
   -p 9411:9411 \
   jaegertracing/all-in-one:1.17
 
+If you have a Kubernetes stack installed then you likely already have this available.
+
+UDP port 6832 is typically the "binary Thrift" port, so that's likely where you would
+want this module configured to send data (other ports and protocols are available).
+
 Set up an L<Net::Async::OpenTracing> instance with those connection details:
 
+ use Net::Async::OpenTracing;
  my $loop = IO::Async::Loop->new;
  $loop->add(
     my $tracing = Net::Async::OpenTracing->new(
@@ -45,13 +53,14 @@ Set up an L<Net::Async::OpenTracing> instance with those connection details:
         port => 6832,
     )
  );
+ $tracer->register_collector($tracing);
+ # Now generate some traffic
  {
-  my $batch = $tracing->new_batch();
-  my $span = $batch->new_span(
+  my $span = $tracer->span(
    'example_span'
   );
   $span->log('test message ' . $_ . ' from the parent') for 1..3;
-  my $child = $span->new_span('child_span');
+  my $child = $span->span('child_span');
   $child->log('message ' . $_ . ' from the child span') for 1..3;
  }
  # Make sure all trace data is sent
@@ -61,8 +70,6 @@ You should then see a trace with 2 spans show up.
 
 =cut
 
-no indirect;
-
 use Syntax::Keyword::Try;
 use Unicode::UTF8 qw(encode_utf8 decode_utf8);
 use Time::HiRes ();
@@ -70,24 +77,53 @@ use Math::Random::Secure;
 use IO::Async::Socket;
 
 use OpenTracing;
+use OpenTracing::Batch;
 
 use Log::Any qw($log);
 
-# The documentation is less clear on this than I'd like:
-# - ordinal value of the list is presumably 0, but might also be 1,
-# so we extract to a constant here
-use constant ENUM_BASE => 0;
+=head2 configure
+
+Takes the following named parameters:
+
+=over 4
+
+=item * C<host> - where to send traces
+
+=item * C<port> - the UDP/TCP port to connect to
+
+=item * C<protocol> - how to communicate: thrift, http/thrift, etc.
+
+=item * C<items_per_batch> - number of spans to try sending each time
+
+=item * C<batches_per_loop> - number of batches to try sending for each loop iteration
+
+=back
+
+=cut
 
 sub configure {
     my ($self, %args) = @_;
     $self->{pending} //= [];
-    for my $k (qw(host port)) {
+    for my $k (qw(host port protocol items_per_batch batches_per_loop)) {
         $self->{$k} = delete $args{$k} if exists $args{$k};
     }
     return $self->next::method(%args);
 }
 
+=head2 host
+
+
+
+=cut
+
 sub host { shift->{host} }
+
+=head2 port
+
+
+
+=cut
+
 sub port { shift->{port} }
 
 sub _add_to_loop {
@@ -99,7 +135,7 @@ sub _add_to_loop {
                 try {
                     $log->warnf("Receiving [%s] from %s - unexpected, this should be one-way opentracing traffic from us?", $payload, $addr);
                 } catch {
-                    $log->errorf("Exception when sending: %s", $@);
+                    $log->errorf("Exception when receiving: %s", $@);
                 }
             },
         )
@@ -162,6 +198,7 @@ sub send_batch {
         encode_utf8($process->name // '');
 
     if(my $tags = $process->tags) {
+        warn "process has tags";
         # list Tag
         $data .= pack 'C1n1 C1N1',
             15, # list
@@ -175,7 +212,7 @@ sub send_batch {
                 encode_utf8($k // ''),
                 8, # type = int32 (enum)
                 2, # field ID = 2
-                ENUM_BASE, # entry 0 is string
+                0, # entry 0 is string
                 11, # type = string
                 3, # field ID = 3
                 encode_utf8($tags->{$k} // ''),
@@ -192,6 +229,8 @@ sub send_batch {
         12, # 12 is struct
         0 + @spans;
     for my $span (@spans) {
+        $log->infof('Span has trace ID %08x', $span->trace_id);
+        $log->infof('Span has ID %08x', $span->id);
         $data .= pack 'CnQ> CnQ> CnQ> CnQ> CnN/a* CnN CnQ> CnQ>',
             # trace_id_low
             10,
@@ -241,7 +280,7 @@ sub send_batch {
                     encode_utf8($k // ''),
                     8, # type = int32 (enum)
                     2, # field ID = 2
-                    ENUM_BASE, # entry 0 is string
+                    0, # entry 0 is string
                     11, # type = string
                     3, # field ID = 3
                     encode_utf8($tags->{$k} // ''),
@@ -272,7 +311,7 @@ sub send_batch {
                         encode_utf8($k),
                         8, # type = int32 (enum)
                         2, # field ID = 2
-                        ENUM_BASE, # entry 0 is string
+                        0, # entry 0 is string
                         11, # type = string
                         3, # field ID = 3
                         encode_utf8($tags->{$k} // ''),
@@ -292,9 +331,11 @@ sub send_batch {
     # my $msg = pack('n1n1N/a*N1', 0x8001, 1, 'submitBatches', 1) . $data;
     # but for UDP, we only get to talk to the agent, so it's a oneway emitBatch instead
     my $msg = pack('n1n1N/a*N1', 0x8001, 4, 'emitBatch', 1) . $data;
+    use Devel::Hexdump qw(xd);
+    print xd($msg);
     if($self->{connected}->is_done) {
         $log->tracef('Sending packet now');
-        $self->udp->send($msg, autoflush => 1);
+        $self->udp->send($msg);
     } else {
         $log->tracef('Defer packet until connection is ready');
         push $self->{pending}->@*, $msg;
@@ -320,5 +361,5 @@ Tom Molesworth <TEAM@cpan.org>
 
 =head1 LICENSE
 
-Copyright Tom Molesworth 2018-2019. Licensed under the same terms as Perl itself.
+Copyright Tom Molesworth 2018-2020. Licensed under the same terms as Perl itself.
 
