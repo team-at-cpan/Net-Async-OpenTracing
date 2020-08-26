@@ -4,6 +4,7 @@ use warnings;
 
 use utf8;
 
+use OpenTracing::Any qw($tracer);
 use Net::Async::OpenTracing;
 use IO::Async::Loop;
 
@@ -22,22 +23,19 @@ $loop->add(
 );
 
 {
-    my $batch = $tracing->new_batch();
     {
-        my $span = $batch->new_span(
-            'example_span'
+        my $span = $tracer->span(
+            operation_name => 'example_span'
         );
-#        $span->log('test message ' . $_ . ' from the parent') for 1..3;
-#        {
-#            my $child = $span->new_span('child_span');
-#            $child->log('message ' . $_ . ' from the child span') for 1..3;
-#        }
-#        {
-#            my $child = $span->new_span('child_span_2');
-#            $child->log('message ' . $_ . ' from the other child span') for 1..3;
-#        }
+        $span->log('test message ' . $_ . ' from the parent') for 1..3;
+        {
+            my $child = $span->span(operation_name => 'child_span');
+            $child->log('message ' . $_ . ' from the child span') for 1..3;
+        }
     }
 }
 
+warn "Sync all pending spans";
 $tracing->sync->get;
+warn "Sync done";
 

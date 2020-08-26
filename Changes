@@ -1,6 +1,7 @@
 Revision history for {{$dist->name}}
 
 {{$NEXT}}
+    Updated for the stable OpenTracing 1.003 release. Please see documentation there for getting started.
 
 0.001     2019-06-10 06:02:28+08:00 Asia/Kuala_Lumpur
     Initial release.
