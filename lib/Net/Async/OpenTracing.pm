@@ -281,7 +281,9 @@ Gathers and sends a single L<OpenTracing::Batch>.
 
 async sub send_next_batch {
     my ($self) = @_;
-    my $batch = OpenTracing::Batch->new;
+    my $batch = OpenTracing::Batch->new(
+        process => $self->tracer->process
+    );
     my @spans = $self->tracer->extract_finished_spans($self->items_per_batch)
         or return 0;
     $batch->add_span($_) for @spans;
