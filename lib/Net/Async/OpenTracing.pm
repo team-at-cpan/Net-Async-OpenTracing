@@ -4,7 +4,7 @@ package Net::Async::OpenTracing;
 use strict;
 use warnings;
 
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 # AUTHORITY
 
 use parent qw(IO::Async::Notifier);
@@ -342,7 +342,7 @@ sub sync {
 
 =head1 AUTHOR
 
-Tom Molesworth <TEAM@cpan.org>
+Tom Molesworth <TEAM@cpan.org> with contributions from C<chp9-u>.
 
 =head1 LICENSE
 
