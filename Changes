@@ -1,6 +1,8 @@
 Revision history for {{$dist->name}}
 
 {{$NEXT}}
+
+1.001     2021-11-21 22:53:05+08:00 Asia/Kuala_Lumpur
     [Bugs fixed]
 
     - tracer process is now propagated to batches, github issue #3 (thanks chp9-u)
