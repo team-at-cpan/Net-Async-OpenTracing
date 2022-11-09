@@ -1,6 +1,8 @@
+requires 'curry', '>= 1.001000';
 requires 'parent', 0;
 requires 'indirect', 0;
 requires 'Future', '>= 0.39';
+requires 'Future::AsyncAwait', 0;
 requires 'Scalar::Util', '>= 1.47';
 requires 'Log::Any', '>= 1.045';
 requires 'Log::Any::Adapter', '>= 1.045';
@@ -10,10 +12,12 @@ requires 'Unicode::UTF8';
 requires 'Time::HiRes';
 requires 'Math::Random::Secure';
 requires 'IO::Async::Socket';
+requires 'IO::Async::Notifier';
 
 requires 'OpenTracing', '>= 1.004';
 
 on 'test' => sub {
+	requires 'Test::NoTabs', 0;
 	requires 'Test::More', '>= 0.98';
 	requires 'Test::Deep', '>= 1.124';
 	requires 'Test::Fatal', '>= 0.010';
